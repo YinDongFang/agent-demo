@@ -6,20 +6,23 @@ import {
 } from "@langchain/core/messages";
 import {
   Command,
-  END,
   interrupt,
   MessagesAnnotation,
   START,
   StateGraph,
 } from "@langchain/langgraph";
-import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
 import { loadSkillTools } from "./skills/index.mjs";
 import { getTools } from "./tools/index.mjs";
 import { createInterface } from "node:readline/promises";
-import { MemorySaver } from "@langchain/langgraph";
+import path from "node:path";
+import { JsonSaver } from "./persistence/JsonSaver.mjs";
+import { v4 as uuidv4 } from "uuid";
 
-// const systemPrompt = `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`;
+const cwd = process.cwd();
+
+const checkpointer = new JsonSaver(path.join(cwd, ".mini-agent", "storage"));
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
@@ -97,28 +100,91 @@ const graph = new StateGraph(MessagesAnnotation)
     },
     ["subagent", "agent"],
   )
-  .compile({ checkpointer: new MemorySaver() });
+  .compile({ checkpointer });
 
-const config = { configurable: { thread_id: "agent-demo" } };
+async function loop() {
+  let threadId = null;
+  let input = null;
 
-const systemPrompt = `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`;
+  async function handleUserInput(query) {
+    const trimmed = query.trim();
+    if (!trimmed) return false;
 
-const query = await rl.question("请输入问题：");
-const result = await graph.invoke(
-  {
-    messages: [new SystemMessage(systemPrompt), new HumanMessage(query)],
-  },
-  config,
-);
-console.log(result.messages[result.messages.length - 1].content);
-
-while (true) {
-  const query = await rl.question("请继续：");
-  if (!query) {
-    break;
+    if (trimmed === "/exit") {
+      // 退出
+      process.exit(0);
+    } else if (trimmed === "/list") {
+      await checkpointer.load();
+      const threadIds = Object.keys(checkpointer.storage);
+      console.log(
+        threadIds
+          .map((threadId, index) => `${index + 1}. ${threadId}`)
+          .join("\n"),
+      );
+      return false;
+    } else if (trimmed === "/new") {
+      // 开启新的thread
+      threadId = uuidv4();
+      input = {
+        messages: [
+          new SystemMessage(
+            `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`,
+          ),
+          new HumanMessage(query),
+        ],
+      };
+    } else if (trimmed === "/clear") {
+      // 清空当前thread
+      await checkpointer.deleteThread(threadId);
+      threadId = uuidv4();
+      input = {
+        messages: [
+          new SystemMessage(
+            `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`,
+          ),
+          new HumanMessage(query),
+        ],
+      };
+      return false;
+    } else if (/\/resume ([a-zA-Z0-9-]+$)/i.test(trimmed)) {
+      // 切换thread
+      const match = trimmed.match(/\/resume ([a-zA-Z0-9-]+$)/i);
+      threadId = match[1];
+      if (!threadId) {
+        console.error("threadId is required");
+        return false;
+      }
+      return false;
+    } else if (!threadId) {
+      // 开启新的thread
+      threadId = uuidv4();
+      input = {
+        messages: [
+          new SystemMessage(
+            `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`,
+          ),
+          new HumanMessage(query),
+        ],
+      };
+    } else {
+      // 继续对话
+      input = new Command({ resume: query });
+    }
+    return true;
   }
-  const result = await graph.invoke(new Command({ resume: query }), config);
-  console.log(result.messages[result.messages.length - 1].content);
+
+  while (true) {
+    let query;
+    do {
+      query = await rl.question("> ");
+    } while (!(await handleUserInput(query)));
+    const result = await graph.invoke(input, {
+      configurable: { thread_id: threadId },
+    });
+    console.log(result.messages[result.messages.length - 1].content);
+  }
 }
+
+await loop();
 
 rl.close();
