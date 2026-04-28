@@ -19,6 +19,8 @@ import { getTools } from "./tools/index.mjs";
 import { createInterface } from "node:readline/promises";
 import { MemorySaver } from "@langchain/langgraph";
 
+// const systemPrompt = `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`;
+
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 const tools = [...getTools(), ...(await loadSkillTools())];
@@ -37,7 +39,9 @@ async function agent(state) {
 }
 
 async function subagent(state) {
-  const response = await llm.invoke([new HumanMessage(state.messages[state.messages.length - 1].content)]);
+  const response = await llm.invoke([
+    new HumanMessage(state.messages[state.messages.length - 1].content),
+  ]);
   return { messages: response };
 }
 
@@ -97,10 +101,7 @@ const graph = new StateGraph(MessagesAnnotation)
 
 const config = { configurable: { thread_id: "agent-demo" } };
 
-const systemPrompt = `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答
-工具列表：
-${tools.map((tool) => `${tool.name}: ${tool.description}`).join("\n")}
-`;
+const systemPrompt = `你是一个助手，请根据用户的问题给出回答，如果用户的问题需要使用工具，请使用工具给出回答`;
 
 const query = await rl.question("请输入问题：");
 const result = await graph.invoke(
