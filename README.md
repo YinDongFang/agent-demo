@@ -16,3 +16,17 @@ export OPENAI_BASE_URL=baseurl
 ```bash
 > mini-agent
 ```
+
+# 演示视频
+
+## 上下文管理
+
+<video src="https://github.com/YinDongFang/agent-demo/blob/main/doc/上下文管理.mp4" controls></video>
+
+## 代码运行
+
+<video src="https://github.com/YinDongFang/agent-demo/blob/main/doc/代码运行.mp4" controls></video>
+
+## 子Agent
+
+<video src="https://github.com/YinDongFang/agent-demo/blob/main/doc/子Agent.mp4" controls></video>
