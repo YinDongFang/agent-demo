@@ -22,7 +22,7 @@ export OPENAI_BASE_URL=baseurl
 ## 上下文管理
 
 《
-<video controls><source src="https://github.com/YinDongFang/agent-demo/blob/main/doc/上下文管理.mp4" /></video>
+<video controls><source src="https://github.com/YinDongFang/agent-demo/blob/main/doc/上下文管理.mp4"></video>
 
 ## 代码运行
 
