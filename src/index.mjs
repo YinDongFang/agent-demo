@@ -68,12 +68,12 @@ async function loop() {
       return false;
     } else if (trimmed === "/new") {
       // 开启新的thread
-      newThread();
+      threadId = null;
       return false;
     } else if (trimmed === "/clear") {
       // 清空当前thread
       await checkpointer.deleteThread(threadId);
-      newThread();
+      threadId = null;
       return false;
     } else if (/\/resume ([a-zA-Z0-9-]+$)/i.test(trimmed)) {
       // 切换thread

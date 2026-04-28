@@ -1,8 +1,14 @@
 {
-  "name": "agent-demo",
+  "name": "@yindongfang/mini-agent",
   "version": "1.0.0",
-  "description": "",
+  "description": "A mini agent framework",
   "main": "index.mjs",
+  "bin": {
+    "mini-agent": "./bin/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
