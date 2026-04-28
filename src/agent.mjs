@@ -1,5 +1,6 @@
-import { HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import {
+  END,
   interrupt,
   MessagesAnnotation,
   START,
@@ -7,69 +8,68 @@ import {
 } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { autoCompact } from "./compact.mjs";
+import { RunnableLambda } from "@langchain/core/runnables";
+import { ChatOpenAI } from "@langchain/openai";
+import { tools } from "./tools/index.mjs";
 
-async function callModel({ messages }, { context: { llm } }) {
+async function callModel(llm, { messages }) {
   const response = await llm.invoke(messages);
   return { messages: response };
 }
 
-async function subagent({ messages }, { context: { llm } }) {
-  const response = await llm.invoke([
-    new HumanMessage(messages[messages.length - 1].content),
-  ]);
-  return { messages: response };
-}
-
-async function userInput({ messages }, { context: { llm } }) {
+async function waitUserInput(llm, { messages }) {
   const input = interrupt("等待用户输入");
-
   const newMessages = await autoCompact(llm, messages);
-
   return { messages: [...newMessages, new HumanMessage(input)] };
 }
 
-function afterAgentCondition({ messages }) {
-  const message = messages[messages.length - 1];
-
-  if (message?.tool_calls?.length > 0) {
-    return "tools";
-  } else {
-    return "user-input";
-  }
-}
-export async function buildAgent({ llm, tools, checkpointer }) {
-  const llmWithTools = llm.bindTools(tools);
+export async function buildAgent({ checkpointer, userInput = true }) {
+  const llm = new ChatOpenAI({
+    modelName: process.env.MODEL_NAME,
+    apiKey: process.env.OPENAI_API_KEY,
+    configuration: {
+      baseURL: process.env.OPENAI_BASE_URL,
+    },
+  }).bindTools(tools);
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("callModel", callModel)
-    .addNode("tools", new ToolNode(tools))
-    .addNode("subagent", subagent)
-    .addNode("user-input", userInput)
-    .addEdge(START, "callModel")
-    .addEdge("subagent", "callModel")
-    .addEdge("user-input", "callModel")
-    .addConditionalEdges("callModel", afterAgentCondition, [
+    .addNode("callModel", (state) => callModel(llm, state))
+    .addNode(
       "tools",
-      "user-input",
-    ])
-    .addConditionalEdges(
-      "tools",
-      (state) => {
-        const message = Array.isArray(state)
-          ? state[state.length - 1]
-          : state.messages[state.messages.length - 1];
-
-        if (
-          message instanceof ToolMessage &&
-          message.name?.startsWith("skill:")
-        ) {
-          return "subagent";
-        } else {
-          return "callModel";
-        }
-      },
-      ["subagent", "callModel"],
+      RunnableLambda.from((state) => {
+        const messages = state.messages;
+        const toolCalls = messages[messages.length - 1].tool_calls;
+        console.log(
+          `\nTool Calls > \n${toolCalls.map((toolCall) => `${toolCall.name}: [${toolCall.id}]`).join(", ")}`,
+        );
+        return state;
+      })
+        .pipe(new ToolNode(tools))
+        .pipe((result) => {
+          const message = result.messages[0];
+          console.log(
+            `\nTool Result >\n${message.name}: [${message.tool_call_id}]`,
+          );
+          return result;
+        }),
     )
+    .addNode("waitUserInput", (state) => waitUserInput(llm, state))
+    .addEdge(START, "callModel")
+    .addConditionalEdges(
+      "callModel",
+      ({ messages }) => {
+        const message = messages[messages.length - 1];
+        const toolCalls = message?.tool_calls?.length;
+        if (!toolCalls) {
+          console.log(`\nAssistant >\n${message.content}`);
+        }
+        return toolCalls ? "tools" : userInput ? "waitUserInput" : END;
+      },
+      ["tools", "waitUserInput", END],
+    )
+    .addEdge("tools", "callModel")
+    .addEdge("waitUserInput", "callModel")
     .compile({ checkpointer });
+
   return graph;
 }

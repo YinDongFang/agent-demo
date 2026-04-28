@@ -1,19 +1,37 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { cwd } from "node:process";
-import { tool } from "langchain";
 import matter from "gray-matter";
-import { z } from "zod";
+import { exists } from "../utils/file.mjs";
 
-async function loadSkillsFromDir(dir) {
-  const root = cwd();
-  const skillsDir = path.join(root, dir);
-  const files = await fs.readdir(skillsDir, { withFileTypes: true });
+const builtinSkills = [
+  {
+    name: "code-runner",
+    arguments: ["filepath"],
+    description: "本地运行指定的nodejs代码文件",
+    content: `通过调用 bash 工具调用 nodejs 运行 $filepath 文件`,
+  },
+];
+
+export function buildSkillPrompt(skills) {
+  return `<system-reminder>
+  
+你有以下 Skills 可以使用：
+
+${skills.map((skill) => `# ${skill.name}\n - params: ${skill.arguments.join(", ")}\n - description: ${skill.description}`).join("\n\n")}
+
+</system-reminder>`;
+}
+
+export async function loadSkills(dir) {
+  if (!(await exists(dir))) {
+    return builtinSkills;
+  }
+  const files = await fs.readdir(dir, { withFileTypes: true });
   const skills = await Promise.all(
     files
       .filter((file) => file.isDirectory())
       .map(async (file) => {
-        const mdPath = path.join(skillsDir, file.name, "SKILL.md");
+        const mdPath = path.join(dir, file.name, "SKILL.md");
         const exists = await fs
           .access(mdPath)
           .then(() => true)
@@ -26,39 +44,5 @@ async function loadSkillsFromDir(dir) {
         return null;
       }),
   );
-  return skills;
-}
-
-export async function loadSkillTools(dir = "skills") {
-  const toolNamePrefix = "skill:";
-  const skills = await loadSkillsFromDir(dir);
-  return skills.map((skill) =>
-    tool(
-      (args) => {
-        const { content, arguments: argumentDefinitions } = skill;
-
-        const argList = argumentDefinitions.map(
-          (argumentName) => args[argumentName],
-        );
-        const prompt = argumentDefinitions
-          .reduce((acc, argumentName, index) => {
-            return acc
-              .replace(`$${argumentName}`, args[argumentName])
-              .replace(`$ARGUMENTS[${index}]`, args[argumentName]);
-          }, content)
-          .replace("$ARGUMENTS", argList.join(", "));
-
-        return prompt;
-      },
-      {
-        name: `${toolNamePrefix}${skill.name}`,
-        description: skill.description || "",
-        schema: z.object(
-          Object.fromEntries(
-            skill.arguments.map((arg) => [arg, z.string()]),
-          ),
-        ),
-      },
-    ),
-  );
+  return [...builtinSkills, ...skills];
 }

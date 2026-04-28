@@ -8,14 +8,14 @@ import o200k_base from "js-tiktoken/ranks/o200k_base";
 
 const enc = new Tiktoken(o200k_base);
 
-function countToken({ messages }) {
+function countToken(messages) {
   const contents = messages.map((message) =>
     typeof message.content === "string"
       ? message.content
       : JSON.stringify(message.content),
   );
   const tokenCount = enc.encode(contents.join("\n")).length;
-  console.log(`[token used]: ${tokenCount}`);
+  console.log(`\nToken Used: ${tokenCount}`);
   return tokenCount;
 }
 

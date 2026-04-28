@@ -1,8 +1,25 @@
-const prompt = `Writes a file to the local filesystem.
+import { tool } from "langchain";
+import fs from "node:fs/promises";
+import { z } from "zod";
 
-Usage:
-- This tool will overwrite the existing file if there is one at the provided path.
-- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
-- Prefer the Edit tool for modifying existing files — it only sends the diff. Only use this tool to create new files or for complete rewrites.
-- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.
-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.`;
+const description = `写入文本到本地文件
+
+- 写入文本内容到本地文件系统
+- 如果执行错误，会返回错误信息`;
+
+export const write = tool(
+  async ({ filepath, content }) => {
+    const result = await fs
+      .writeFile(filepath, content)
+      .catch((error) => error);
+    return result;
+  },
+  {
+    name: "write",
+    description,
+    schema: z.object({
+      filepath: z.string(),
+      content: z.string(),
+    }),
+  },
+);

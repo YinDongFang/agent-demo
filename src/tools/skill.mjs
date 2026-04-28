@@ -1,21 +1,38 @@
-const prompt = `Execute a skill within the main conversation
+import { tool } from "langchain";
+import { z } from "zod";
 
-When users ask you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.
+const description = `执行 Skill 工具
 
-When users reference a \"slash command\" or \"/<something>\" (e.g., \"/commit\", \"/review-pr\"), they are referring to a skill. Use this tool to invoke it.
+- Skill 提供特定能力，额外的上下文信息和知识
+- 当用户请求执行任务时，检查是否有可用的技能匹配
+- 每个 Skill 支持传入特定参数或单纯的文本输入，使用该 Tool 调用指定名称的 Skill 并传入参数
+- 可用的 Skill 列表在 system-reminder 提示词中给出
+- Skill 执行过程中可以调用其他 Skill，但是不要调用已经正在运行的 Skill，避免重复调用
+- 如果 Tool 已经能够满足用户的需求，不要调用 Skill`;
 
-How to invoke:
-- Use this tool with the skill name and optional arguments
-- Examples:
-  - \`skill: \"pdf\"\` - invoke the pdf skill
-  - \`skill: \"commit\", args: \"-m 'Fix bug'\"\` - invoke with arguments
-  - \`skill: \"review-pr\", args: \"123\"\` - invoke with arguments
-  - \`skill: \"ms-office-suite:pdf\"\` - invoke using fully qualified name
+export const skill = tool(
+  ({ name, params, input }, { context: { skills } }) => {
+    const skillDefinition = skills.find((skill) => skill.name === name);
+    const { content, arguments: args = [] } = skillDefinition;
 
-Important:
-- Available skills are listed in system-reminder messages in the conversation
-- When a skill matches the user's request, this is a BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE generating any other response about the task
-- NEVER mention a skill without actually calling this tool
-- Do not invoke a skill that is already running
-- Do not use this tool for built-in CLI commands (like /help, /clear, etc.)
-- If you see a <command-name> tag in the current conversation turn, the skill has ALREADY been loaded - follow the instructions directly instead of calling this tool again`;
+    const values = args.map((key) => params[key]);
+    const prompt = args
+      .reduce((acc, key, index) => {
+        return acc
+          .replace(`$${key}`, params[key])
+          .replace(`$ARGUMENTS[${index}]`, params[key]);
+      }, content)
+      .replace("$ARGUMENTS", input || values.join(", "));
+
+    return prompt;
+  },
+  {
+    name: "skill",
+    description,
+    schema: z.object({
+      name: z.string(),
+      params: z.any(),
+      input: z.string(),
+    }),
+  },
+);

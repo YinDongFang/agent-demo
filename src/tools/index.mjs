@@ -1,21 +1,8 @@
-import { tool } from "langchain";
-import { z } from "zod";
-import { exec } from "node:child_process";
+import { read } from "./read.mjs";
+import { write } from "./write.mjs";
+import { bash } from "./bash.mjs";
+import { list } from "./list.mjs";
+import { skill } from "./skill.mjs";
+import { subagent } from "./subagent.mjs";
 
-export function getTools() {
-  return [
-    tool(
-      async ({ file }) => {
-        const result = await exec(`node ${file}`);
-        return result.stdout;
-      },
-      {
-        name: "code-runner",
-        description: "执行指定代码文件",
-        schema: z.object({
-          file: z.string(),
-        }),
-      },
-    ),
-  ];
-}
+export const tools = [read, write, bash, list, skill, subagent];
