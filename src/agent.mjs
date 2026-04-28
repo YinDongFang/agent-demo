@@ -6,34 +6,21 @@ import {
   StateGraph,
 } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { ChatOpenAI } from "@langchain/openai";
-import { loadSkillTools } from "./skills/index.mjs";
-import { getTools } from "./tools/index.mjs";
 import { autoCompact } from "./compact.mjs";
 
-const tools = [...getTools(), ...(await loadSkillTools())];
-
-const llm = new ChatOpenAI({
-  modelName: process.env.MODEL_NAME,
-  apiKey: process.env.OPENAI_API_KEY,
-  configuration: {
-    baseURL: process.env.OPENAI_BASE_URL,
-  },
-}).bindTools(tools);
-
-async function agent(state) {
-  const response = await llm.invoke(state.messages);
+async function callModel({ messages }, { context: { llm } }) {
+  const response = await llm.invoke(messages);
   return { messages: response };
 }
 
-async function subagent(state) {
+async function subagent({ messages }, { context: { llm } }) {
   const response = await llm.invoke([
-    new HumanMessage(state.messages[state.messages.length - 1].content),
+    new HumanMessage(messages[messages.length - 1].content),
   ]);
   return { messages: response };
 }
 
-async function userInput({ messages }) {
+async function userInput({ messages }, { context: { llm } }) {
   const input = interrupt("等待用户输入");
 
   const newMessages = await autoCompact(llm, messages);
@@ -50,16 +37,21 @@ function afterAgentCondition({ messages }) {
     return "user-input";
   }
 }
-export function buildAgent(checkpointer) {
+export async function buildAgent({ llm, tools, checkpointer }) {
+  const llmWithTools = llm.bindTools(tools);
+
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("agent", agent)
+    .addNode("callModel", callModel)
     .addNode("tools", new ToolNode(tools))
     .addNode("subagent", subagent)
     .addNode("user-input", userInput)
-    .addEdge(START, "agent")
-    .addEdge("subagent", "agent")
-    .addEdge("user-input", "agent")
-    .addConditionalEdges("agent", afterAgentCondition, ["tools", "user-input"])
+    .addEdge(START, "callModel")
+    .addEdge("subagent", "callModel")
+    .addEdge("user-input", "callModel")
+    .addConditionalEdges("callModel", afterAgentCondition, [
+      "tools",
+      "user-input",
+    ])
     .addConditionalEdges(
       "tools",
       (state) => {
@@ -73,10 +65,10 @@ export function buildAgent(checkpointer) {
         ) {
           return "subagent";
         } else {
-          return "agent";
+          return "callModel";
         }
       },
-      ["subagent", "agent"],
+      ["subagent", "callModel"],
     )
     .compile({ checkpointer });
   return graph;
