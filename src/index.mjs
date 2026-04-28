@@ -11,14 +11,24 @@ import { systemPrompt } from "./prompt.mjs";
 import { buildSkillPrompt } from "./skills/index.mjs";
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-
 const checkpointer = new JsonSaver(
   path.join(process.cwd(), ".mini-agent", "storage"),
 );
-
 const agent = await buildAgent({ checkpointer });
-
 const skills = await loadSkills(path.join(process.cwd(), "skills"));
+
+function printHelpInfo() {
+  console.log(`
+操作命令：
+  /help: 查看帮助信息
+  /exit: 退出程序
+  /list: 列出所有thread
+  /current: 查看当前thread
+  /new: 开启新的thread
+  /clear: 清空当前thread
+  /resume <threadId>: 切换thread
+`);
+}
 
 async function loop() {
   let threadId = null;
@@ -41,6 +51,9 @@ async function loop() {
     if (trimmed === "/exit") {
       // 退出
       process.exit(0);
+    } else if (trimmed === "/help") {
+      printHelpInfo();
+      return false;
     } else if (trimmed === "/list") {
       await checkpointer.load();
       const threadIds = Object.keys(checkpointer.storage);
@@ -49,6 +62,9 @@ async function loop() {
           .map((threadId, index) => `${index + 1}. ${threadId}`)
           .join("\n"),
       );
+      return false;
+    } else if (trimmed === "/current") {
+      console.log(threadId);
       return false;
     } else if (trimmed === "/new") {
       // 开启新的thread
@@ -90,7 +106,6 @@ async function loop() {
     });
   }
 }
-
+printHelpInfo();
 await loop();
-
 rl.close();
