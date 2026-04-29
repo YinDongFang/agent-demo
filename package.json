@@ -1,6 +1,6 @@
 {
   "name": "@yindongfang/mini-agent",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A mini agent framework",
   "main": "index.mjs",
   "bin": {
