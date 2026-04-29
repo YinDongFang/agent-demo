@@ -79,10 +79,7 @@ async function loop() {
       // 切换thread
       const match = trimmed.match(/\/resume ([a-zA-Z0-9-]+$)/i);
       threadId = match[1];
-      if (!threadId) {
-        console.error("threadId is required");
-        return false;
-      }
+      if (!threadId) console.error("threadId is required");
       return false;
     } else if (!threadId) {
       // 开启新的thread并直接对话

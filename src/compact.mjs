@@ -19,7 +19,7 @@ function countToken(messages) {
   return tokenCount;
 }
 
-const compactPrompt = `创建一份对话摘要，根据目前为止的全部对话内容，step-by-step 分析对话中的消息，不要考虑其他未在对话中提及的内容
+const compactPrompt = `创建一份对话摘要，根据目前为止的全部对话内容，分析对话中的消息，不要考虑其他未在对话中提及的内容
 
 返回纯文本，不要调用任何工具
 
@@ -43,7 +43,9 @@ async function compact(llm, messages) {
   ];
 }
 
-export async function autoCompact(llm, messages) {
-  const tokenCount = countToken(messages);
-  return tokenCount > 5000 ? await compact(llm, messages) : [];
+export async function autoCompact(llm, rawMessages) {
+  const compactCount = Math.max(rawMessages.length - 5, 0); // 保留10条消息
+  const messages = rawMessages.slice(0, compactCount);
+  const shouldCompact = compactCount > 20 || countToken(messages) > 5000;
+  return shouldCompact ? await compact(llm, messages) : [];
 }

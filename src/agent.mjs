@@ -1,4 +1,4 @@
-import { HumanMessage } from "@langchain/core/messages";
+import { coerceMessageLikeToMessage, HumanMessage } from "@langchain/core/messages";
 import {
   END,
   interrupt,
@@ -18,8 +18,9 @@ async function callModel(llm, { messages }) {
 }
 
 async function waitUserInput(llm, { messages }) {
+  const resumedMessages = messages.map(coerceMessageLikeToMessage);
   const input = interrupt("等待用户输入");
-  const newMessages = await autoCompact(llm, messages);
+  const newMessages = await autoCompact(llm, resumedMessages);
   return { messages: [...newMessages, new HumanMessage(input)] };
 }
 
