@@ -1,4 +1,7 @@
-import { coerceMessageLikeToMessage, HumanMessage } from "@langchain/core/messages";
+import {
+  coerceMessageLikeToMessage,
+  HumanMessage,
+} from "@langchain/core/messages";
 import {
   END,
   interrupt,
@@ -12,8 +15,15 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
 import { tools } from "./tools/index.mjs";
 
-async function callModel(llm, { messages }) {
-  const response = await llm.invoke(messages);
+async function callModel(
+  llm,
+  { messages },
+  { configurable: { thread_id }, context: { parent_id } },
+) {
+  const traceId = parent_id ? `${parent_id}__${thread_id}` : thread_id;
+  const response = await llm.invoke(messages, {
+    options: { headers: { "x-portkey-trace-id": traceId } },
+  });
   return { messages: response };
 }
 
@@ -34,7 +44,7 @@ export async function buildAgent({ checkpointer, userInput = true }) {
   }).bindTools(tools);
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("callModel", (state) => callModel(llm, state))
+    .addNode("callModel", (state, config) => callModel(llm, state, config))
     .addNode(
       "tools",
       RunnableLambda.from((state) => {

@@ -4,6 +4,7 @@ import { tool } from "langchain";
 import { z } from "zod";
 import { buildSkillPrompt } from "../skills/index.mjs";
 import { buildAgent } from "../agent.mjs";
+import { v4 as uuidv4 } from "uuid";
 
 const description = `运行一个新的 Subagent 执行多步骤复杂任务，不污染主线程的上下文
 
@@ -23,10 +24,10 @@ prompt: \"请写一篇200字左右的作文，题目自拟，内容积极向上�
 let agent = null;
 
 export const subagent = tool(
-  async ({ prompt }, { context: { skills } }) => {
+  async ({ prompt }, { context: { skills }, configurable: { thread_id } }) => {
     if (!agent) {
       agent = await buildAgent({
-        checkpointer: true,
+        checkpointer: undefined,
         userInput: false,
       });
     }
@@ -39,7 +40,11 @@ export const subagent = tool(
           ),
         ],
       },
-      { recursionLimit: 100 },
+      {
+        recursionLimit: 100,
+        configurable: { thread_id: uuidv4() },
+        context: { parent_id: thread_id },
+      },
     );
     return result.messages[result.messages.length - 1].content;
   },
